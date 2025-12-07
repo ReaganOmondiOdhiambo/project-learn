@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sharding-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sharding-proxy
+  template:
+    metadata:
+      labels:
+        app: sharding-proxy
+    spec:
+      containers:
+      - name: sharding-proxy
+        image: sharding-proxy:latest
+        imagePullPolicy: Never
+        env:
+        - name: PORT
+          value: "8080"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PASSWORD
+          value: "password"
+        - name: DB_NAME
+          value: "postgres"
+        # DNS names for StatefulSet pods: pod-name.service-name
+        - name: SHARDS
+          value: "postgres-shard-0.postgres-headless,postgres-shard-1.postgres-headless,postgres-shard-2.postgres-headless"
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sharding-proxy
+spec:
+  type: LoadBalancer
+  selector:
+    app: sharding-proxy
+  ports:
+  - port: 80
+    targetPort: 8080

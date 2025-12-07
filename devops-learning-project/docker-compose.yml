@@ -1,0 +1,162 @@
+# DOCKER COMPOSE - Orchestrating Multiple Containers
+# ===================================================
+# Docker Compose allows you to define and run multi-container applications.
+# This file defines all services, networks, and volumes needed for the app.
+
+version: '3.8'
+
+# SERVICES - Each service is a container
+services:
+  
+  # ZOOKEEPER - Kafka dependency for cluster coordination
+  # Kafka uses Zookeeper to manage cluster metadata
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    hostname: zookeeper
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # KAFKA - Message broker for event streaming
+  # This is the core of our event-driven architecture
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9093:9093"  # External access port
+    environment:
+      # Kafka broker configuration
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      
+      # Listener configuration
+      # PLAINTEXT_INTERNAL for container-to-container communication
+      # PLAINTEXT for external access (from host machine)
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9093,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      
+      # Topic auto-creation settings
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9093"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # PRODUCER SERVICE - Python Flask app
+  # Receives HTTP requests and publishes to Kafka
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: producer 
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:29092
+      KAFKA_TOPIC: messages
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+    restart: unless-stopped
+    # Resource limits (important for auto-scaling demos)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # CONSUMER SERVICE - Node.js app
+  # Consumes messages from Kafka and provides WebSocket updates
+  consumer:
+    build:
+      context: ./consumer
+      dockerfile: Dockerfile
+    container_name: consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER: kafka:29092
+      KAFKA_TOPIC: messages
+      KAFKA_GROUP_ID: consumer-group-1
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # API GATEWAY - Go app
+  # Single entry point for all client requests
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    depends_on:
+      - producer
+      - consumer
+    environment:
+      PRODUCER_URL: http://producer:5000
+      CONSUMER_URL: http://consumer:3000
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    networks:
+      - app-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+# NETWORKS - Custom network for container communication
+# All containers on this network can communicate using service names as hostnames
+networks:
+  app-network:
+    driver: bridge
+    name: devops-learning-network
+
+# VOLUMES - Persistent data storage
+# Data in volumes persists even when containers are removed
+volumes:
+  kafka-data:
+    name: kafka-data
+  zookeeper-data:
+    name: zookeeper-data

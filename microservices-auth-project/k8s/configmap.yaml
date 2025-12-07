@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: microservices-auth
+data:
+  # Service URLs (internal DNS names)
+  AUTH_SERVICE_URL: "http://auth-service"
+  USER_SERVICE_URL: "http://user-service"
+  PRODUCT_SERVICE_URL: "http://product-service"
+  ORDER_SERVICE_URL: "http://order-service"
+  
+  # Environment Config
+  NODE_ENV: "production"
+  FLASK_ENV: "production"
+  
+  # Token Expiry
+  JWT_EXPIRES_IN: "15m"
+  JWT_REFRESH_EXPIRES_IN: "7d"

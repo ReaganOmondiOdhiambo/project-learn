@@ -1,0 +1,155 @@
+# KUBERNETES DEPLOYMENT - Producer Service
+# =========================================
+# This manifest defines how to deploy the producer service in Kubernetes
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: producer
+  labels:
+    app: producer
+    tier: backend
+spec:
+  # Number of pod replicas
+  # Kubernetes will maintain this many running instances
+  replicas: 2
+  
+  # Selector to identify which pods belong to this deployment
+  selector:
+    matchLabels:
+      app: producer
+  
+  # Pod template - defines what each pod should look like
+  template:
+    metadata:
+      labels:
+        app: producer
+    spec:
+      containers:
+      - name: producer
+        # Replace with your actual image from Docker Hub/registry
+        image: producer:latest
+        imagePullPolicy: IfNotPresent
+        
+        ports:
+        - containerPort: 5000
+          name: http
+        
+        # Environment variables
+        env:
+        - name: KAFKA_BROKER
+          value: "kafka-service:9092"
+        - name: KAFKA_TOPIC
+          value: "messages"
+        
+        # Resource requests and limits
+        # Requests: Guaranteed resources
+        # Limits: Maximum resources allowed
+        resources:
+          requests:
+            cpu: 100m      # 0.1 CPU cores
+            memory: 128Mi  # 128 megabytes
+          limits:
+            cpu: 500m      # 0.5 CPU cores
+            memory: 512Mi  # 512 megabytes
+        
+        # Liveness probe - checks if container is alive
+        # Kubernetes restarts the container if this fails
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe - checks if container is ready to serve traffic
+        # Kubernetes won't send traffic until this succeeds
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# KUBERNETES SERVICE - Producer Service
+# ======================================
+# Services provide stable network endpoints for pods
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: producer-service
+  labels:
+    app: producer
+spec:
+  type: ClusterIP  # Internal service (not exposed outside cluster)
+  selector:
+    app: producer
+  ports:
+  - port: 5000
+    targetPort: 5000
+    protocol: TCP
+    name: http
+
+---
+# HORIZONTAL POD AUTOSCALER - Producer
+# =====================================
+# Automatically scales pods based on CPU/memory usage
+# This is KEY for demonstrating auto-scaling!
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: producer-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: producer
+  
+  # Minimum and maximum number of replicas
+  minReplicas: 2
+  maxReplicas: 10
+  
+  # Metrics to scale on
+  metrics:
+  # Scale based on CPU usage
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70  # Scale up when CPU > 70%
+  
+  # Scale based on memory usage
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80  # Scale up when memory > 80%
+  
+  # Scaling behavior configuration
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30  # Wait 30s before scaling up
+      policies:
+      - type: Percent
+        value: 50  # Scale up by 50% of current pods
+        periodSeconds: 30
+      - type: Pods
+        value: 2   # Or add 2 pods
+        periodSeconds: 30
+      selectPolicy: Max  # Use the policy that scales more
+    
+    scaleDown:
+      stabilizationWindowSeconds: 60  # Wait 60s before scaling down
+      policies:
+      - type: Percent
+        value: 25  # Scale down by 25%
+        periodSeconds: 60

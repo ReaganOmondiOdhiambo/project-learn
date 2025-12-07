@@ -1,0 +1,11 @@
+# Python dependencies for the Producer service
+# Each line specifies a package and its version
+
+# Flask - Web framework for creating REST APIs
+Flask==3.0.0
+
+# Kafka Python client - For producing messages to Kafka
+kafka-python==2.0.2
+
+# Werkzeug - WSGI utility library (Flask dependency)
+Werkzeug==3.0.1

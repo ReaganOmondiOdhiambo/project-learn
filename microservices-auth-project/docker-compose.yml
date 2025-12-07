@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # INFRASTRUCTURE
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: FERODO2001
+      POSTGRES_DB: users
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - microservices-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d users"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongodb
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - microservices-net
+
+  # MICROSERVICES
+  auth-service:
+    build: ./auth-service
+    container_name: auth-service
+    environment:
+      PORT: 4000
+      REDIS_HOST: redis
+      JWT_SECRET: dev-secret-key
+      JWT_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - microservices-net
+    ports:
+      - "4000:4000"
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      PORT: 5000
+      DATABASE_URL: postgresql://postgres:FERODO2001@postgres:5432/users
+      AUTH_SERVICE_URL: http://auth-service:4000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - microservices-net
+    ports:
+      - "5001:5000" # Map to 5001 to avoid conflict if running locally
+
+  product-service:
+    build: ./product-service
+    container_name: product-service
+    environment:
+      PORT: 3000
+      MONGO_URI: mongodb://mongodb:27017
+      AUTH_SERVICE_URL: http://auth-service:4000
+    depends_on:
+      mongodb:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    networks:
+      - microservices-net
+    ports:
+      - "3001:3000"
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    environment:
+      PORT: 6000
+      MONGO_URI: mongodb://mongodb:27017/orders_db
+      AUTH_SERVICE_URL: http://auth-service:4000
+      PRODUCT_SERVICE_URL: http://product-service:3000
+      USER_SERVICE_URL: http://user-service:5000
+    depends_on:
+      mongodb:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+    networks:
+      - microservices-net
+    ports:
+      - "6000:6000"
+
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    environment:
+      PORT: 8080
+      AUTH_SERVICE_URL: http://auth-service:4000
+      USER_SERVICE_URL: http://user-service:5000
+      PRODUCT_SERVICE_URL: http://product-service:3000
+      ORDER_SERVICE_URL: http://order-service:6000
+    depends_on:
+      - auth-service
+      - user-service
+      - product-service
+      - order-service
+    ports:
+      - "8080:8080"
+    networks:
+      - microservices-net
+
+networks:
+  microservices-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:

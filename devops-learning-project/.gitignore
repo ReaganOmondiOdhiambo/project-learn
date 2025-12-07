@@ -1,0 +1,59 @@
+# Files to ignore in Docker builds and Git
+# =========================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+.dockerignore
+
+# Environment
+.env
+.env.local
+
+# Test results
+*.coverage
+htmlcov/
+.pytest_cache/
+
+# Monitoring logs
+monitoring/*.log
+load-tests/*.log
