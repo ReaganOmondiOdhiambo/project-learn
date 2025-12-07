@@ -69,15 +69,26 @@ The client will:
 3.  Receive the generated ID.
 4.  Send a `GetUser` request using that ID.
 
-```text
-Client starting...
-Creating user... { name: 'Reagan Test', email: 'reagan@example.com', age: 30 }
-✅ User created successfully: { id: '1', name: 'Reagan Test', email: 'reagan@example.com', age: 30 }
-Fetching user with ID: 1...
-✅ User fetched successfully: { id: '1', name: 'Reagan Test', email: 'reagan@example.com', age: 30 }
-```
+### 4. Viewing Traces (Observability)
+We use **OpenTelemetry** and **Jaeger** to visualize the request flow.
 
-## 🛠 Under the Hood
+1.  Open Jaeger UI: [http://localhost:16686](http://localhost:16686)
+2.  Select Service: `node-client` or `go-server`.
+3.  Click **Find Traces**.
+4.  You will see the trace: `node-client` -> `go-server` -> `InternalLogic`.
+
+```mermaid
+sequenceDiagram
+    participant Client (Node)
+    participant Server (Go)
+    participant Jaeger
+    
+    Client->>Server: gRPC Request (TraceID injected)
+    Server->>Server: Internal Logic (Span created)
+    Server-->>Client: Response
+    Client->>Jaeger: Send Spans (OTLP)
+    Server->>Jaeger: Send Spans (OTLP)
+```
 
 ### The Contract (`user.proto`)
 This file defines exactly what data can be sent. It's like a strong Type interface that works across languages.
